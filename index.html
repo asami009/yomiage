@@ -56,9 +56,18 @@
   .prog > i { display: block; height: 100%; width: 0%; background: #dfe7e1; transition: width .2s linear; }
 
   /* ---------- 入力 ---------- */
-  .field { position: relative; margin-bottom: 14px; }
+  .field { display: flex; align-items: stretch; gap: 10px; margin-bottom: 14px; }
+  .field-main { position: relative; flex: 1; min-width: 0; display: flex; }
+  .btn-clear {
+    flex: none; width: 54px; background: transparent; color: var(--body);
+    border: 1px solid var(--line-strong); border-radius: var(--r-lg);
+    writing-mode: vertical-rl; text-orientation: upright;
+    font-size: 15px; letter-spacing: .28em; text-indent: .28em; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .btn-clear:hover { background: #efece6; border-color: #bdb5a8; }
   textarea {
-    display: block; width: 100%; min-height: 260px; resize: vertical;
+    width: 100%; min-height: 260px; resize: vertical;
     padding: 24px 24px 46px; background: var(--surface);
     border: 1px solid var(--line-strong); border-radius: var(--r-lg); box-shadow: var(--shade-sm);
     font-family: inherit; font-size: 17px; line-height: 2; color: var(--ink); outline: none;
@@ -73,7 +82,7 @@
   }
 
   /* ---------- ボタン ---------- */
-  .actions { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; margin-bottom: 40px; }
+  .actions { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin-bottom: 40px; }
   button {
     font-family: inherit; font-weight: 600; cursor: pointer; border-radius: var(--r-md);
     border: 1px solid transparent; transition: background-color .18s, border-color .18s, color .18s, transform .08s;
@@ -95,6 +104,35 @@
     color: var(--body); border-color: var(--line-strong);
   }
   .btn-sub:hover:not(:disabled) { background: #efece6; border-color: #bdb5a8; }
+
+  /* ---------- 保存した文章 ---------- */
+  .saved { margin-bottom: 40px; }
+  .btn-save {
+    width: 100%; font-size: 14px; padding: 14px; margin-bottom: 14px;
+    background: transparent; color: var(--body); border: 1px dashed var(--line-strong);
+  }
+  .btn-save:hover:not(:disabled) { background: #efece6; border-color: var(--accent); color: var(--accent-ink); }
+  #savedList { list-style: none; margin: 0; padding: 0; }
+  #savedList li {
+    display: flex; align-items: stretch; gap: 1px; margin-bottom: 8px;
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-md);
+    overflow: hidden; box-shadow: var(--shade-sm);
+  }
+  #savedList li.on { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(55, 84, 73, .12); }
+  .s-play {
+    flex: 1; min-width: 0; text-align: left; background: transparent; border: 0; border-radius: 0;
+    padding: 15px 16px; font-size: 15px; line-height: 1.6; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;
+  }
+  .s-play:hover { background: #f2efe9; }
+  #savedList li.on .s-play { color: var(--accent-ink); }
+  .s-act {
+    flex: none; background: transparent; border: 0; border-left: 1px solid var(--line);
+    border-radius: 0; padding: 0 15px; font-size: 13px; color: var(--muted); font-weight: 500;
+  }
+  .s-act:hover { background: #efece6; color: var(--ink); }
+  .s-act.del:hover { background: #fbf3f1; color: var(--danger); }
+  .s-empty { font-size: 13px; color: var(--muted); text-align: center; padding: 6px 0 2px; }
 
   /* ---------- 設定 ---------- */
   .card { border-top: 1px solid var(--line); padding-top: 10px; }
@@ -138,8 +176,8 @@
   .warn.on { display: block; }
 
   @media (max-width: 560px) {
-        .actions { grid-template-columns: 1fr 1fr; }
-    .btn-main { grid-column: 1 / -1; }
+        .actions { grid-template-columns: 1fr auto; }
+    .btn-clear { width: 46px; }
     .row { flex-wrap: wrap; gap: 12px; }
     .row label { width: auto; }
     .speed { width: 100%; }
@@ -161,16 +199,24 @@
     </section>
 
     <div class="field">
-      <label for="txt" class="sr-only" hidden>読み上げる文章</label>
-      <textarea id="txt" placeholder="ここに文字を打って、エンターで読み上げ。&#10;改行したいときは shift + エンター。"></textarea>
-      <div class="count" id="count">0文字</div>
+      <div class="field-main">
+        <label for="txt" class="sr-only" hidden>読み上げる文章</label>
+        <textarea id="txt" placeholder="ここに文字を打って、エンターで読み上げ。&#10;改行したいときは shift + エンター。"></textarea>
+        <div class="count" id="count">0文字</div>
+      </div>
+      <button class="btn-clear" id="clearBtn">消す</button>
     </div>
 
     <div class="actions">
       <button class="btn-main" id="playBtn">よみあげる</button>
       <button class="btn-sub" id="pauseBtn" disabled>一時停止</button>
-      <button class="btn-sub" id="clearBtn">消す</button>
     </div>
+
+    <section class="saved">
+      <button class="btn-save" id="saveBtn">いまの文章を保存</button>
+      <ul id="savedList"></ul>
+      <p class="s-empty" id="savedEmpty">保存すると、押すだけで読み上げられます。</p>
+    </section>
 
     <section class="card">
       <div class="row">
@@ -207,6 +253,9 @@
   var nowText = document.getElementById('nowText');
   var progBar = document.getElementById('progBar');
   var warn = document.getElementById('warn');
+  var saveBtn = document.getElementById('saveBtn');
+  var savedList = document.getElementById('savedList');
+  var savedEmpty = document.getElementById('savedEmpty');
 
   var voices = [];
   var chunks = [];
@@ -301,6 +350,8 @@
 
   function setPlayingUI(on) {
     playing = on;
+    if (!on) playingId = null;
+    if (typeof renderSaved === 'function' && document.getElementById('savedList')) renderSaved();
     playBtn.textContent = on ? 'とめる' : 'よみあげる';
     playBtn.className = 'btn-main' + (on ? ' playing' : '');
     pauseBtn.disabled = !on;
@@ -421,6 +472,95 @@
     rateVal.textContent = rateLabel(parseFloat(rate.value));
     save('rate', rate.value);
   });
+
+  /* ---- 保存した文章 ---- */
+  var saved = [];
+  var playingId = null;
+
+  function loadSavedList() {
+    try {
+      var raw = localStorage.getItem('yomiage.saved');
+      saved = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(saved)) saved = [];
+    } catch (e) { saved = []; }
+  }
+  function storeSavedList() {
+    try { localStorage.setItem('yomiage.saved', JSON.stringify(saved)); } catch (e) {}
+  }
+  function labelOf(text) {
+    var one = text.replace(/\s+/g, ' ').trim();
+    return one.length > 28 ? one.slice(0, 28) + '…' : one;
+  }
+
+  function renderSaved() {
+    savedList.innerHTML = '';
+    savedEmpty.hidden = saved.length > 0;
+
+    saved.forEach(function (item) {
+      var li = document.createElement('li');
+      if (item.id === playingId && playing) li.className = 'on';
+
+      var play = document.createElement('button');
+      play.className = 's-play';
+      play.type = 'button';
+      play.textContent = labelOf(item.text);
+      play.title = item.text;
+      play.addEventListener('click', function () {
+        txt.value = item.text;
+        save('text', item.text);
+        updateCount();
+        playingId = item.id;
+        if (playing) stopAll();
+        startAll();
+        renderSaved();
+      });
+
+      var open = document.createElement('button');
+      open.className = 's-act';
+      open.type = 'button';
+      open.textContent = '開く';
+      open.addEventListener('click', function () {
+        txt.value = item.text;
+        save('text', item.text);
+        updateCount();
+        txt.focus();
+        txt.setSelectionRange(item.text.length, item.text.length);
+      });
+
+      var del = document.createElement('button');
+      del.className = 's-act del';
+      del.type = 'button';
+      del.textContent = '×';
+      del.setAttribute('aria-label', 'この文章を消す');
+      del.addEventListener('click', function () {
+        saved = saved.filter(function (x) { return x.id !== item.id; });
+        storeSavedList();
+        renderSaved();
+      });
+
+      li.appendChild(play);
+      li.appendChild(open);
+      li.appendChild(del);
+      savedList.appendChild(li);
+    });
+  }
+
+  saveBtn.addEventListener('click', function () {
+    var v = txt.value.trim();
+    if (!v) { txt.focus(); return; }
+    // 同じ文章が既にあるなら増やさない
+    var dup = saved.some(function (x) { return x.text === v; });
+    if (!dup) {
+      saved.unshift({ id: String(Date.now()) + String(Math.random()).slice(2, 7), text: v });
+      storeSavedList();
+      renderSaved();
+    }
+    saveBtn.textContent = dup ? 'もう保存してあります' : '保存しました';
+    setTimeout(function () { saveBtn.textContent = 'いまの文章を保存'; }, 1400);
+  });
+
+  loadSavedList();
+  renderSaved();
 
   /* ---- 前回の続きから ---- */
   var t = load('text'); if (t) txt.value = t;
