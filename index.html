@@ -1,0 +1,433 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>よみあげ — 打った文字をしゃべらせる</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="description" content="打ち込んだ文字を、このパソコンの声で読み上げます。登録も通信もなし。" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23f7f5f1'/%3E%3Cpath d='M11 12h4l5-4v16l-5-4h-4z' fill='%23375449'/%3E%3Cpath d='M23 11a8 8 0 010 10' stroke='%23375449' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg: #f7f5f1;
+    --surface: #ffffff;
+    --ink: #1c1a17;
+    --body: #34302a;
+    --muted: #6f6a60;
+    --line: #e3ded5;
+    --line-strong: #cec7bb;
+    --accent: #375449;
+    --accent-soft: #eef1ee;
+    --accent-ink: #2a4137;
+    --danger: #8c3a32;
+    --shade-sm: 0 1px 2px rgba(43, 38, 30, .05);
+    --shade: 0 2px 4px rgba(43, 38, 30, .04), 0 12px 28px -14px rgba(43, 38, 30, .22);
+    --r-lg: 14px;
+    --r-md: 10px;
+    --r-sm: 7px;
+    --serif: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", serif;
+    --sans: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.8;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .app { max-width: 660px; margin: 0 auto; padding: 46px 22px 72px; }
+
+  /* ---------- header ---------- */
+
+  /* ---------- いま読んでるところ ---------- */
+  .nowbox {
+    display: none; background: var(--accent); color: #f2f5f2;
+    border-radius: var(--r-lg); padding: 22px 24px 20px; margin-bottom: 22px; box-shadow: var(--shade);
+  }
+  .nowbox.on { display: block; animation: rise .28s cubic-bezier(.22,.8,.3,1); }
+  @keyframes rise { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  #nowText {
+    font-family: var(--serif); font-size: 20px; font-weight: 500; line-height: 1.75;
+    word-break: break-word; text-wrap: pretty; color: #fbfcfb;
+  }
+  .prog { margin-top: 16px; height: 3px; background: rgba(255,255,255,.18); border-radius: 100px; overflow: hidden; }
+  .prog > i { display: block; height: 100%; width: 0%; background: #dfe7e1; transition: width .2s linear; }
+
+  /* ---------- 入力 ---------- */
+  .field { position: relative; margin-bottom: 14px; }
+  textarea {
+    display: block; width: 100%; min-height: 260px; resize: vertical;
+    padding: 24px 24px 46px; background: var(--surface);
+    border: 1px solid var(--line-strong); border-radius: var(--r-lg); box-shadow: var(--shade-sm);
+    font-family: inherit; font-size: 17px; line-height: 2; color: var(--ink); outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  textarea::placeholder { color: #948c80; }
+  textarea:hover { border-color: #bdb5a8; }
+  textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(55, 84, 73, .12); }
+  .count {
+    position: absolute; right: 20px; bottom: 16px; font-size: 12px; color: var(--muted);
+    font-variant-numeric: tabular-nums; letter-spacing: .03em; pointer-events: none;
+  }
+
+  /* ---------- ボタン ---------- */
+  .actions { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; margin-bottom: 40px; }
+  button {
+    font-family: inherit; font-weight: 600; cursor: pointer; border-radius: var(--r-md);
+    border: 1px solid transparent; transition: background-color .18s, border-color .18s, color .18s, transform .08s;
+  }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:active { transform: translateY(1px); }
+  button:disabled { cursor: not-allowed; color: #928a7d; border-color: var(--line); background: transparent; transform: none; }
+
+  .btn-main {
+    font-size: 16px; letter-spacing: .06em; padding: 17px 24px;
+    background: var(--accent); color: #f6f8f6; box-shadow: var(--shade-sm);
+  }
+  .btn-main:hover { background: #2d4740; }
+  .btn-main.playing { background: var(--danger); }
+  .btn-main.playing:hover { background: #77302a; }
+
+  .btn-sub {
+    font-size: 14px; padding: 17px 20px; background: transparent;
+    color: var(--body); border-color: var(--line-strong);
+  }
+  .btn-sub:hover:not(:disabled) { background: #efece6; border-color: #bdb5a8; }
+
+  /* ---------- 設定 ---------- */
+  .card { border-top: 1px solid var(--line); padding-top: 10px; }
+  .row { display: flex; align-items: center; gap: 20px; margin-top: 20px; }
+  .row label { flex: none; width: 44px; font-size: 14px; font-weight: 600; color: var(--ink); }
+  select {
+    flex: 1; min-width: 0; background: var(--surface); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+    padding: 11px 13px; font-size: 16px; font-family: inherit; cursor: pointer;
+    transition: border-color .18s, box-shadow .18s;
+  }
+  select:hover { border-color: #bdb5a8; }
+  select:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(55, 84, 73, .12); }
+
+  .speed { display: flex; align-items: center; gap: 18px; flex: 1; min-width: 0; }
+  input[type=range] {
+    flex: 1; min-width: 0; -webkit-appearance: none; appearance: none; height: 22px;
+    background: transparent; outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--line-strong); border-radius: 100px; }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 20px; height: 20px; margin-top: -9px;
+    border-radius: 50%; background: var(--surface); border: 1px solid var(--line-strong);
+    box-shadow: var(--shade-sm); transition: border-color .18s, transform .1s;
+  }
+  input[type=range]:hover::-webkit-slider-thumb { border-color: var(--accent); }
+  input[type=range]:active::-webkit-slider-thumb { transform: scale(1.12); }
+  input[type=range]:focus-visible::-webkit-slider-thumb { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(55, 84, 73, .15); }
+  .speedval {
+    flex: none; min-width: 76px; text-align: right; font-size: 14px;
+    font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums;
+  }
+
+  .note { margin-top: 26px; font-size: 13px; color: var(--muted); line-height: 2; max-width: 56ch; text-wrap: pretty; }
+
+  .warn {
+    display: none; margin-bottom: 22px; background: #fbf3f1; color: #6f2f28;
+    border: 1px solid #e6cdc8; border-left: 3px solid var(--danger);
+    border-radius: var(--r-md); padding: 16px 20px; font-size: 14px; line-height: 1.9;
+  }
+  .warn.on { display: block; }
+
+  @media (max-width: 560px) {
+        .actions { grid-template-columns: 1fr 1fr; }
+    .btn-main { grid-column: 1 / -1; }
+    .row { flex-wrap: wrap; gap: 12px; }
+    .row label { width: auto; }
+    .speed { width: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+
+<div class="app">
+
+  <main>
+    <p class="warn" id="warn"></p>
+
+    <section class="nowbox" id="nowbox" aria-live="polite">
+      <p id="nowText"></p>
+      <div class="prog"><i id="progBar"></i></div>
+    </section>
+
+    <div class="field">
+      <label for="txt" class="sr-only" hidden>読み上げる文章</label>
+      <textarea id="txt" placeholder="ここに文字を打って、エンターで読み上げ。&#10;改行したいときは shift + エンター。"></textarea>
+      <div class="count" id="count">0文字</div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-main" id="playBtn">よみあげる</button>
+      <button class="btn-sub" id="pauseBtn" disabled>一時停止</button>
+      <button class="btn-sub" id="clearBtn">消す</button>
+    </div>
+
+    <section class="card">
+      <div class="row">
+        <label for="voice">声</label>
+        <select id="voice"></select>
+      </div>
+      <div class="row">
+        <label for="rate">速さ</label>
+        <div class="speed">
+          <input type="range" id="rate" min="0.5" max="2" step="0.1" value="1" />
+          <div class="speedval" id="rateVal">ふつう</div>
+        </div>
+      </div>
+      <p class="note" id="guide">
+        声はこのパソコンに入っているものを使います。打った文章がネットに送られることはありません。<br />
+        声を増やすときは、Macの「システム設定 → アクセシビリティ → 読み上げコンテンツ → システムの声」から追加できます。
+      </p>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  var synth = window.speechSynthesis;
+  var txt = document.getElementById('txt');
+  var countEl = document.getElementById('count');
+  var playBtn = document.getElementById('playBtn');
+  var pauseBtn = document.getElementById('pauseBtn');
+  var clearBtn = document.getElementById('clearBtn');
+  var voiceSel = document.getElementById('voice');
+  var rate = document.getElementById('rate');
+  var rateVal = document.getElementById('rateVal');
+  var nowbox = document.getElementById('nowbox');
+  var nowText = document.getElementById('nowText');
+  var progBar = document.getElementById('progBar');
+  var warn = document.getElementById('warn');
+
+  var voices = [];
+  var chunks = [];
+  var idx = 0;
+  var playing = false;
+  var stopped = false;
+  var keepAlive = null;
+
+  if (!synth) {
+    warn.textContent = 'このブラウザは読み上げに対応していません。Safari か Chrome で開いてください。';
+    warn.className = 'warn on';
+    playBtn.disabled = true;
+    return;
+  }
+
+  /* ---- 保存（消えても動く） ---- */
+  function save(k, v) { try { localStorage.setItem('yomiage.' + k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem('yomiage.' + k); } catch (e) { return null; } }
+
+  /* ---- 声の一覧。日本語を上に ---- */
+  function fillVoices() {
+    voices = synth.getVoices();
+    if (!voices.length) return;
+    var ja = [], other = [];
+    voices.forEach(function (v, i) {
+      (/^ja/i.test(v.lang) ? ja : other).push({ v: v, i: i });
+    });
+    voiceSel.innerHTML = '';
+    function add(list, groupLabel) {
+      if (!list.length) return;
+      var g = document.createElement('optgroup');
+      g.label = groupLabel;
+      list.forEach(function (o) {
+        var op = document.createElement('option');
+        op.value = o.i;
+        op.textContent = o.v.name + '（' + o.v.lang + '）';
+        g.appendChild(op);
+      });
+      voiceSel.appendChild(g);
+    }
+    add(ja, '日本語');
+    add(other, 'その他の言語');
+
+    var saved = load('voice');
+    var savedName = saved !== null ? saved : null;
+    var picked = -1;
+    if (savedName) {
+      voices.forEach(function (v, i) { if (v.name === savedName) picked = i; });
+    }
+    if (picked < 0 && ja.length) picked = ja[0].i;
+    if (picked < 0) picked = 0;
+    voiceSel.value = String(picked);
+
+    if (!ja.length) {
+      warn.innerHTML = '日本語の声が見つかりませんでした。英語の声で日本語を読ませると変な発音になります。<br />Macの「システム設定 → アクセシビリティ → 読み上げコンテンツ → システムの声」から日本語を追加してください。';
+      warn.className = 'warn on';
+    }
+  }
+  fillVoices();
+  synth.onvoiceschanged = fillVoices;
+
+  /* ---- 文を細かく割る（長文で止まるのを防ぐ） ---- */
+  function splitText(s) {
+    var raw = s.replace(/\r/g, '').split(/(?<=[。！？!?\n])/);
+    var out = [];
+    raw.forEach(function (p) {
+      var t = p.trim();
+      if (!t) return;
+      // 1つが長すぎると途中で切れるので、読点でさらに割る
+      if (t.length > 120) {
+        var sub = t.split(/(?<=[、,])/);
+        var buf = '';
+        sub.forEach(function (x) {
+          if ((buf + x).length > 120 && buf) { out.push(buf); buf = x; }
+          else { buf += x; }
+        });
+        if (buf.trim()) out.push(buf);
+      } else {
+        out.push(t);
+      }
+    });
+    return out;
+  }
+
+  function rateLabel(r) {
+    if (r <= 0.7) return 'ゆっくり';
+    if (r < 0.95) return 'すこし遅い';
+    if (r <= 1.1) return 'ふつう';
+    if (r <= 1.5) return 'すこし早い';
+    return '早口';
+  }
+
+  function setPlayingUI(on) {
+    playing = on;
+    playBtn.textContent = on ? 'とめる' : 'よみあげる';
+    playBtn.className = 'btn-main' + (on ? ' playing' : '');
+    pauseBtn.disabled = !on;
+    if (!on) {
+      pauseBtn.textContent = '一時停止';
+      nowbox.className = 'nowbox';
+      progBar.style.width = '0%';
+    } else {
+      nowbox.className = 'nowbox on';
+    }
+  }
+
+  function speakNext() {
+    if (stopped || idx >= chunks.length) {
+      stopAll();
+      return;
+    }
+    var text = chunks[idx];
+    nowText.textContent = text;
+    progBar.style.width = Math.round((idx / chunks.length) * 100) + '%';
+
+    var u = new SpeechSynthesisUtterance(text);
+    var v = voices[parseInt(voiceSel.value, 10)];
+    if (v) { u.voice = v; u.lang = v.lang; }
+    u.rate = parseFloat(rate.value);
+    u.onend = function () { idx++; speakNext(); };
+    u.onerror = function (e) {
+      if (e && e.error === 'interrupted') return;
+      idx++; speakNext();
+    };
+    synth.speak(u);
+  }
+
+  function startAll() {
+    var s = txt.value.trim();
+    if (!s) { txt.focus(); return; }
+    chunks = splitText(s);
+    if (!chunks.length) return;
+    idx = 0;
+    stopped = false;
+    synth.cancel();
+    setPlayingUI(true);
+    speakNext();
+    // Chromeが長文の途中で黙る対策
+    clearInterval(keepAlive);
+    keepAlive = setInterval(function () {
+      if (playing && !synth.paused && synth.speaking) { synth.pause(); synth.resume(); }
+    }, 9000);
+  }
+
+  function stopAll() {
+    stopped = true;
+    clearInterval(keepAlive);
+    synth.cancel();
+    setPlayingUI(false);
+  }
+
+  playBtn.addEventListener('click', function () {
+    if (playing) stopAll(); else startAll();
+  });
+
+  pauseBtn.addEventListener('click', function () {
+    if (!playing) return;
+    if (synth.paused) { synth.resume(); pauseBtn.textContent = '一時停止'; }
+    else { synth.pause(); pauseBtn.textContent = 'つづきから'; }
+  });
+
+  clearBtn.addEventListener('click', function () {
+    stopAll();
+    txt.value = '';
+    save('text', '');
+    updateCount();
+    txt.focus();
+  });
+
+  function updateCount() { countEl.textContent = txt.value.length + '文字'; }
+
+  txt.addEventListener('input', function () { updateCount(); save('text', txt.value); });
+
+  /* 指で操作する機械（スマホ・タブレット）は shift が無く改行できなくなるので、
+     エンター起動はマウスのある機械だけに限る */
+  var isTouch = false;
+  try { isTouch = window.matchMedia('(pointer: coarse)').matches; } catch (e) {}
+
+  if (!isTouch) {
+    txt.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      if (e.shiftKey) return;                 // shift+エンターは改行
+      if (e.isComposing || e.keyCode === 229) return;  // 変換中の確定エンター
+      e.preventDefault();
+      if (playing) stopAll();
+      startAll();
+    });
+  }
+
+  /* 画面の案内も機械に合わせて出し分ける */
+  var isApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+  if (isTouch) {
+    txt.placeholder = 'ここに文字を打って、下の「よみあげる」で読み上げ。';
+    var g = document.getElementById('guide');
+    if (g) {
+      g.innerHTML = '打った文章がネットに送られることはありません。<br />' +
+        (isApple
+          ? '声はこの端末に入っているものを使います。iPhoneやiPadでは、ほかのアプリに切り替えたり画面を消すと読み上げが止まります。'
+          : '声はこの端末に入っているものを使います。');
+    }
+  }
+
+  /* iPhone/iPad は画面を消したりアプリを切り替えると読み上げが死ぬので、状態を戻す */
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && playing) stopAll();
+  });
+  voiceSel.addEventListener('change', function () {
+    var v = voices[parseInt(voiceSel.value, 10)];
+    if (v) save('voice', v.name);
+  });
+  rate.addEventListener('input', function () {
+    rateVal.textContent = rateLabel(parseFloat(rate.value));
+    save('rate', rate.value);
+  });
+
+  /* ---- 前回の続きから ---- */
+  var t = load('text'); if (t) txt.value = t;
+  var r = load('rate'); if (r) rate.value = r;
+  rateVal.textContent = rateLabel(parseFloat(rate.value));
+  updateCount();
+
+  window.addEventListener('beforeunload', function () { synth.cancel(); });
+})();
+</script>
