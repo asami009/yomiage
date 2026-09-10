@@ -39,22 +39,6 @@
   }
   .app { max-width: 660px; margin: 0 auto; padding: 46px 22px 72px; }
 
-  /* ---------- header ---------- */
-
-  /* ---------- いま読んでるところ ---------- */
-  .nowbox {
-    display: none; background: var(--accent); color: #f2f5f2;
-    border-radius: var(--r-lg); padding: 22px 24px 20px; margin-bottom: 22px; box-shadow: var(--shade);
-  }
-  .nowbox.on { display: block; animation: rise .28s cubic-bezier(.22,.8,.3,1); }
-  @keyframes rise { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-  #nowText {
-    font-family: var(--serif); font-size: 20px; font-weight: 500; line-height: 1.75;
-    word-break: break-word; text-wrap: pretty; color: #fbfcfb;
-  }
-  .prog { margin-top: 16px; height: 3px; background: rgba(255,255,255,.18); border-radius: 100px; overflow: hidden; }
-  .prog > i { display: block; height: 100%; width: 0%; background: #dfe7e1; transition: width .2s linear; }
-
   /* ---------- 入力 ---------- */
   .field { display: flex; align-items: stretch; gap: 10px; margin-bottom: 14px; }
   .field-main { position: relative; flex: 1; min-width: 0; display: flex; }
@@ -193,11 +177,6 @@
   <main>
     <p class="warn" id="warn"></p>
 
-    <section class="nowbox" id="nowbox" aria-live="polite">
-      <p id="nowText"></p>
-      <div class="prog"><i id="progBar"></i></div>
-    </section>
-
     <div class="field">
       <div class="field-main">
         <label for="txt" class="sr-only" hidden>読み上げる文章</label>
@@ -249,9 +228,6 @@
   var voiceSel = document.getElementById('voice');
   var rate = document.getElementById('rate');
   var rateVal = document.getElementById('rateVal');
-  var nowbox = document.getElementById('nowbox');
-  var nowText = document.getElementById('nowText');
-  var progBar = document.getElementById('progBar');
   var warn = document.getElementById('warn');
   var saveBtn = document.getElementById('saveBtn');
   var savedList = document.getElementById('savedList');
@@ -355,13 +331,7 @@
     playBtn.textContent = on ? 'とめる' : 'よみあげる';
     playBtn.className = 'btn-main' + (on ? ' playing' : '');
     pauseBtn.disabled = !on;
-    if (!on) {
-      pauseBtn.textContent = '一時停止';
-      nowbox.className = 'nowbox';
-      progBar.style.width = '0%';
-    } else {
-      nowbox.className = 'nowbox on';
-    }
+    if (!on) pauseBtn.textContent = '一時停止';
   }
 
   function speakNext() {
@@ -370,9 +340,6 @@
       return;
     }
     var text = chunks[idx];
-    nowText.textContent = text;
-    progBar.style.width = Math.round((idx / chunks.length) * 100) + '%';
-
     var u = new SpeechSynthesisUtterance(text);
     var v = voices[parseInt(voiceSel.value, 10)];
     if (v) { u.voice = v; u.lang = v.lang; }
